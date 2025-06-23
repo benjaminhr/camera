@@ -26,6 +26,7 @@ struct CameraPreview: UIViewRepresentable {
         let view = PreviewView()
         view.videoPreviewLayer.session = session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        view.frame = CGRectMake(0, 0, 1280, 720)
         return view
     }
     
