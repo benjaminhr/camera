@@ -17,6 +17,7 @@ final class Camera: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBu
     @Published var detectedObjects: [CGRect] = []
     @Published var loaded: Bool = false
     @Published var deviceISO: Float = 0.0
+    @Published var mode: String = "algo"
     
     
     private var detectedObjectsWithTimestamp: [(rect: CGRect, timestamp: Date)] = []
@@ -186,50 +187,53 @@ final class Camera: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBu
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let brightness = averageBrightness(ciImage: ciImage)
-        
-        DispatchQueue.main.async {
-            self.adjustISO(basedOn: brightness)
+        if mode == "algo" {
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let brightness = averageBrightness(ciImage: ciImage)
+            
+            DispatchQueue.main.async {
+                self.adjustISO(basedOn: brightness)
+            }
+        } else {
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+            
+            do {
+                try handler.perform([visionRequest])
+            } catch {
+                print("Failed to perform Vision request: \(error)")
+            }
         }
-//
-//        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-//        
-//        do {
-//            try handler.perform([visionRequest])
-//        } catch {
-//            print("Failed to perform Vision request: \(error)")
-//        }
     }
     
     lazy var visionRequest: VNCoreMLRequest = {
         print("vision request")
         do {
             let model = try VNCoreMLModel(for: YOLOv3(configuration: MLModelConfiguration()).model)
-            
+
             DispatchQueue.main.async {
                 self.loaded = true
-            }       
+            }
             
             let request = VNCoreMLRequest(model: model) { [weak self] request, error in
                 guard let results = request.results as? [VNRecognizedObjectObservation] else { return }
                 let now = Date()
                 
                 DispatchQueue.main.async {
-                    for result in results {
-                        self?.detectedObjectsWithTimestamp.append((rect: result.boundingBox, timestamp: now))
-                    }
-                    
-                    self?.detectedObjectsWithTimestamp = self?.detectedObjectsWithTimestamp.filter {
-                        now.timeIntervalSince($0.timestamp) < 3
-                    } ?? []
-                    
-                    if self?.detectedObjectsWithTimestamp.count ?? 0 > 10 {
-                        self?.detectedObjectsWithTimestamp.removeFirst()
-                    }
+//                    for result in results {
+//                        self?.detectedObjectsWithTimestamp.append((rect: result.boundingBox, timestamp: now))
+//                    }
+//                    
+//                    self?.detectedObjectsWithTimestamp = self?.detectedObjectsWithTimestamp.filter {
+//                        now.timeIntervalSince($0.timestamp) < 1
+//                    } ?? []
+//                    
+//                    if self?.detectedObjectsWithTimestamp.count ?? 0 > 5 {
+//                        self?.detectedObjectsWithTimestamp.removeFirst()
+//                    }
                     
                     withAnimation {
-                        self?.detectedObjects = self?.detectedObjectsWithTimestamp.map { $0.rect } ?? []
+//                        self?.detectedObjects = self?.detectedObjectsWithTimestamp.map { $0.rect } ?? []
+                        self?.detectedObjects = results.map { $0.boundingBox }
                     }
 //                    self?.detectedObjects = results.map { $0.boundingBox }
                 }
